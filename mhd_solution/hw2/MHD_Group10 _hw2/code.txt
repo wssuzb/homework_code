@@ -1,3 +1,4 @@
+
 using Plots
 gr()
 
@@ -165,3 +166,194 @@ plot(p1, p2, p3, p4, p5, p6, p7, p8, layout=l,legend=:topright, dpi=300)
 plot!(size=(1200,800))
 savefig("./hw2.pdf")
 close(fig)
+
+
+
+
+
+
+N=2001;
+M=1001;
+U=zeros(M,N);
+X=zeros(1,N);
+dt=0.001;
+dx=0.002;
+C=dt/dx;
+
+for m=1:M
+    t=dt*(m-1);
+    for n=1:N
+        x=(n-1)*dx-2;
+        if t==0
+            if x<-0.8
+                U(m,n)=1.8;
+            end
+            if x>=-0.8&&x<-0.3
+                U(m,n)=1.4+0.4*cos(2*pi*(x+0.8));
+            end
+            if x>=-0.3&&x<0
+                U(m,n)=1;
+            end
+            if x>=0
+                U(m,n)=1.8;
+            end
+        else
+            if x==-2||x==2
+                U(m,n)=1.8;
+            elseif x~=-2&&x~=2
+                U(m,n)=-((U(m-1,n))^(2)-(U(m-1,n-1))^(2))*C*0.5+U(m-1,n);
+            end
+        end
+    end
+end
+
+for n=1:N
+    X(1,n)=(n-1)*dx-2;
+end
+
+tiledlayout(2,2);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(251,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(501,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(751,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(M,:),'r--o','MarkerSize',3);
+
+
+
+
+
+
+
+N=2001;
+M=1001;
+U=zeros(M,N);
+X=zeros(1,N);
+dt=0.001;
+dx=0.002;
+C=dt/dx;
+
+for m=1:M
+    t=dt*(m-1);
+    for n=1:N
+        x=(n-1)*dx-2;
+        if t==0
+            if x<-0.8
+                U(m,n)=1.8;
+            end
+            if x>=-0.8&&x<-0.3
+                U(m,n)=1.4+0.4*cos(2*pi*(x+0.8));
+            end
+            if x>=-0.3&&x<0
+                U(m,n)=1;
+            end
+            if x>=0
+                U(m,n)=1.8;
+            end
+        else
+            if x==-2||x==2
+                U(m,n)=1.8;
+            elseif x~=-2&&x~=2
+                U(m,n)=-((U(m-1,n+1))^(2)-(U(m-1,n-1))^(2))*C*0.5*0.5+0.5*(U(m-1,n+1)+U(m-1,n-1));
+            end
+        end
+    end
+end
+
+for n=1:N
+    X(1,n)=(n-1)*dx-2;
+end
+
+tiledlayout(2,2);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(251,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(501,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(751,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(M,:),'r--o','MarkerSize',3);
+
+
+
+
+N=2001;
+M=2001;
+U=zeros(M,N);
+X=zeros(1,N);
+dt=0.001;
+dx=0.002;
+C=dt/dx;
+
+for m=1:M
+    t=dt*(m-1);
+    for n=1:N
+        x=(n-1)*dx-2;
+        if t==0
+            if x<-0.8
+                U(m,n)=1.8;
+            end
+            if x>=-0.8&&x<-0.3
+                U(m,n)=1.4+0.4*cos(2*pi*(x+0.8));
+            end
+            if x>=-0.3&&x<0
+                U(m,n)=1;
+            end
+            if x>=0
+                U(m,n)=1.8;
+            end
+        elseif t==0.001
+            if x==-2||x==2
+                U(m,n)=1.8;
+            elseif x~=-3&&x~=3
+                U(m,n)=-((U(m-1,n))^(2)-(U(m-1,n-1))^(2))*C*0.5+U(m-1,n);
+            end
+        elseif t>0.001
+            if x==-2||x==2
+                U(m,n)=1.8;
+            else
+                U(m,n)=U(m-2,n)-0.5*C*((U(m-1,n+1))^(2)-(U(m-1,n-1))^(2));
+            end             
+        end
+    end
+end
+
+for n=1:N
+    X(1,n)=(n-1)*dx-2;
+end
+
+tiledlayout(2,2);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(251,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(501,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(1001,:),'r--o','MarkerSize',3);
+nexttile;
+plot(X,U(1,:),'k:');
+hold on;
+plot(X,U(1501,:),'r--o','MarkerSize',3);
