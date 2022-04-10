@@ -1,0 +1,339 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Numerical solution code, by Python%
+import numpy as np
+class Shock1DNumerical:
+    def __init__(self, length, method='LW',
+                 ngrid=256, gamma=1.4, visc=0, CFL=0.5):
+
+        global N,x,dx,gm,C,D,W,integrator
+        N,gm = ngrid, gamma
+        dx = length/N
+        C,D = CFL*dx, visc*dx
+        x = np.linspace(-length/2, length/2, N+1)
+
+        # mass, momentum, energy density
+        W = np.zeros((3,N+1))
+
+        m = method[0].lower()
+        if  m == 'r': integrator = Roe
+        else: raise RuntimeError('unknown method')
+
+    # origin of x is at midpoint in [-L/2, L/2]
+    def coordinate(self): return x
+    def density(self): return density()
+    def velocity(self): return velocity()
+    def pressure(self): return pressure()
+    def energy(self): return energy()
+    def mass(self): return mass()
+    def init(self,rL,pL,rR,pR):
+        N2 = N//2
+        W[0,N2:] = rR
+        W[1,N2:] = 0
+        W[2,N2:] = pR/(gm-1)
+        W[0,:N2] = rL
+        W[1,:N2] = 0
+        W[2,:N2] = pL/(gm-1)
+
+    def run(self,t):
+        """ run simulation for time t until
+        shock wave reaches tube's edge
+        """
+        while t>0:
+            dt = time_step()
+            if t<dt: dt=t
+            integrator(dt)
+            t -= dt
+def mass(): return W[1]
+def density(): return W[0]
+def velocity(): return W[1]/W[0]
+def pressure(): return (gm-1)*(W[2] - W[1]**2/W[0]/2)
+def energy(): return W[2]
+def sound_speed(): return np.sqrt(gm*pressure()/W[0])
+def enthalpy(): return gm*W[2]/W[0] - (gm-1)*(W[1]/W[0])**2/2
+
+def time_step():
+    """ CFL condition """
+    u = np.abs(W[1]/W[0])
+    dt = C/np.max(u + sound_speed())
+    if integrator == Roe: dt/=2
+    return dt
+
+def flux(W): 
+    F = np.empty_like(W)
+    u = W[1]/W[0] # velocity
+    KE = W[1]*u/2 # kinetic energy density
+    F[0] = W[1] # mass flux
+    F[1] = (gm-1)*W[2] + (3-gm)*KE # momentum flux
+    F[2] = (gm*W[2] - (gm-1)*KE)*u # energy flux
+    return F
+
+def Roe(dt):
+    rho = density()
+    u = velocity()
+    h = enthalpy()
+    r = np.sqrt(rho[1:]/rho[:-1])
+    u = (r*u[1:] + u[:-1])/(r+1) # Roe average
+    h = (r*h[1:] + h[:-1])/(r+1)
+    a = np.sqrt((gm-1)*(h - u**2/2))
+    b1 = (gm-1)*(u/a)**2/2
+    b2 = (gm-1)/a**2
+    
+    # S = sign of eigen values
+    S = np.array([np.sign(u-a),
+                  np.sign(u),
+                  np.sign(u+a)])
+    # P = eigen vectors in columns
+    P = np.array([np.ones((3,N)),
+                  [u-a, u, u+a],
+                  [h-a*u, u**2/2, h+a*u]])
+    # Q = inverse matrix of P
+    Q = np.array([[(b1 + u/a)/2, -(b2*u + 1/a)/2, b2/2],
+                  [1-b1, b2*u, -b2],
+                  [(b1 - u/a)/2, -(b2*u - 1/a)/2, b2/2]])
+    F = flux(W)
+    D = np.diff(F)
+    D = np.einsum('ijk,jk->ik',Q,D)
+    D = np.einsum('ijk,jk->ik',P,S*D)
+    F = (F[:,:-1] + F[:,1:] - D)/2
+    W[:,1:-1] -= np.diff(F)/dx*dt
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Exact solution code, by Python%
+import numpy as np
+from scipy.optimize import newton
+class Shock1DExact:
+    def __init__(self, rho_L, pres_L, rho_R, pres_R, gamma=1.4):
+        global gm,Ms,rL,pL,rR,pR,r1,u1,p1,r2,aL,aR,a2
+        gm = gamma
+        rL,pL,rR,pR = rho_L, pres_L, rho_R, pres_R
+        aL = (gm*pL/rL)**.5 # sound speed at x<0
+        aR = (gm*pR/rR)**.5 # sound speed at x>0
+
+        # Mach number of shock wave
+        Ms = newton(lambda x: x - 1/x
+                    - aL/aR*(gm+1)/(gm-1)
+                    *(1 - (pR/pL*(2*gm*x**2 - (gm-1))
+                           /(gm+1))**((gm-1)/(2*gm)))
+                    ,1)
+
+        # from contact discontinuity to shock wave
+        r1 = rR/(2/Ms**2 + gm-1)*(gm+1)
+        u1 = 2*aR/(gm+1)*(Ms - 1/Ms)
+        p1 = pR*(2*gm*Ms**2 - (gm-1))/(gm+1)
+
+        # from contact discontinuity to expansion fan
+        r2 = rL*(p1/pL)**(1/gm)
+        a2 = (gm*p1/r2)**.5
+
+
+    def profile(self, t):
+        """ return x,r,u,p = np.array of
+        coordinate, density, velocity, pressure
+        at time t > 0
+        shock wave starts from x=0 at t=0
+        solution depends only on x/t
+        """
+        x1 = -aL*t
+        x2 = (u1 - a2)*t
+        x3 = u1*t # contact discontinuity
+        x4 = Ms*aR*t # shock wave
+
+        # expansion fan
+        N = 33
+        xE = np.linspace(x1,x2,N)
+        uE = 2/(gm+1)*(aL + xE/t)
+        rE = rL*(1 - (gm-1)/2*uE/aL)**(2/(gm-1))
+        pE = pL*(rE/rL)**gm
+
+        L = 1
+        x = np.hstack((x1-L, xE, x3,x3,x4,x4,x4+L))
+        r = np.hstack((rL, rE, r2,r1,r1,rR,rR))
+        u = np.hstack((0, uE, u1,u1,u1,0,0))
+        p = np.hstack((pL, pE, p1,p1,p1,pR,pR))
+
+        return x,r,u*r,(p/0.4)+0.5*r*u**2
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%plot code, by Python%
+import numpy as np
+import matplotlib.pyplot as plt
+from Shock1DExact import Shock1DExact
+from Shock1DNumerical import Shock1DNumerical
+method = 'Roe'
+e = Shock1DExact(0.455, 3.5277298876404504, 0.5, 0.5710000000000001)
+n = Shock1DNumerical(2,method)
+x,r,u,p = e.profile(0.14)
+n.init(0.455, 3.5277298876404504, 0.5, 0.5710000000000001)
+n.run(0.14)
+
+plt.figure(figsize=(6.4, 5))
+
+ax = plt.subplot(3,1,1)
+ax.plot(x,r,'k',label='exact', ls='--', lw=0.5)
+ax.plot(n.coordinate(), n.density(), label=method, color='black', ls='-')
+
+ax.set_ylabel(r'$\rho$', fontsize=14)
+# plt.axis([-1,1,0,1.1])
+ax.set_xlim(-1,1)
+plt.legend(loc='upper right')
+
+ax1 = plt.subplot(3,1,2)
+ax1.plot(x,u,'k',label='exact', ls='--', lw=0.5)
+
+ax1.plot(n.coordinate(), n.mass(), label=method, color='black', ls='-')
+
+ax1.set_ylabel(r'$m = \rho$ u', fontsize=14)
+
+ax1.set_xlim(-1,1)
+plt.legend(loc='upper right')
+#
+ax2 = plt.subplot(3,1,3)
+ax2.plot(x,p,'k',label='exact', ls='--', lw=0.5)
+
+ax2.plot(n.coordinate(), n.energy(), label='method', color='black', ls='-')
+
+ax2.set_ylabel(r'$E$', fontsize=14)
+
+ax2.set_xlim(-1,1)
+plt.legend(loc='upper right')
+plt.xlabel('x', fontsize=14)
+
+bwith = 1
+for ax in [ax, ax1, ax2]:
+    ax.tick_params(which='major', length=5,labelsize=10, width=1.0, colors='black', direction='in')
+    ax.tick_params(which ='minor', length=3, width=1.0, labelsize=10, labelcolor='0.6', direction='in')
+
+    ax.tick_params(which = 'both', top=False,bottom=True,left=True,right=True)
+    ax.spines['bottom'].set_linewidth(bwith)
+    ax.spines['left'].set_linewidth(bwith)
+    ax.spines['top'].set_linewidth(bwith)
+    ax.spines['right'].set_linewidth(bwith)
+plt.tight_layout()
+plt.savefig('Roe.pdf')
+plt.show()
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Upwind_non_conservation,by Matlab%
+M=261;
+N=1001;
+L=1.6;
+T=0.14;
+dt=T/(N-1);
+dx=L/(M-1);
+V_total=cell(1,M);
+U0=zeros(3,M);
+U=zeros(3,M);
+U_new=zeros(3,M);
+X=zeros(1,M);
+r=1.4;
+
+for m=1:M
+    x=-L/2+(m-1)*dx;
+    if x<0
+        U(:,m)=[0.445,0.311/0.445,(r-1)*(8.928-1/2*0.445*(0.311/0.445)^(2))];
+        U0(:,m)=[0.445,0.311/0.445,(r-1)*(8.928-1/2*0.445*(0.311/0.445)^(2))];
+    else
+        U(:,m)=[0.5,0,(r-1)*(1.4275)];
+        U0(:,m)=[0.5,0,(r-1)*(1.4275)];
+    end
+    X(1,m)=x;
+end
+
+for n=1:N
+    for m=1:M
+        if m==1
+            U_new(:,m)=[0.445,0.311/0.445,(r-1)*(8.928-1/2*0.445*(0.311/0.445)^(2))];
+        elseif m==M
+            U_new(:,m)=[0.5,0,(r-1)*(1.4275)];
+        else
+            a=sqrt(r*U(3,m)/U(1,m));
+            R=[1/(2*a^(2)),1/(a^(2)),1/(2*a^(2));-1/(2*U(1,m)*a),0,1/(2*U(1,m)*a);1/2,0,1/2];
+            L=[0,-U(1,m)*a,1;a^(2),0,-1;0,U(1,m)*a,1];
+            V=[U(2,m)-a,0,0;0,U(2,m),0;0,0,U(2,m)+a];
+            V_total{1,m}=V;
+            Ma=[abs(V(1,1))*L(1,:)*(U(:,m)-U(:,m-sign(V(1,1))));abs(V(2,2))*L(2,:)*(U(:,m)-U(:,m-sign(V(2,2))));abs(V(3,3))*L(3,:)*(U(:,m)-U(:,m-sign(V(3,3))))];
+            U_new(:,m)=U(:,m)-dt/dx*R*Ma;
+        end
+    end
+    U=U_new;
+end
+
+plot(X,U(1,:),'k');
+hold on;
+plot(X,U0(1,:),'k:');
+
+plot(X,U(2,:).*U(1,:),'k');
+hold on;
+plot(X,U0(2,:).*U0(1,:),'k:');
+
+plot(X,U(3,:)/(r-1)+0.5*U(1,:).*U(2,:).*U(2,:),'k');
+hold on;
+plot(X,U0(3,:)/(r-1)+0.5*U0(1,:).*U0(2,:).*U0(2,:),'k:');
+% %
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Upwind_conservation,by Matlab%
+M=261;
+N=1001;
+L=1.6;
+T=0.14;
+dt=T/(N-1);
+dx=L/(M-1);
+V_total=cell(1,M);
+U0=zeros(3,M);
+U=zeros(3,M);
+A=zeros(3,3);
+X=zeros(1,M);
+r=1.4;
+
+for m=1:M
+    x=-L/2+(m-1)*dx;
+    if x<0
+        U(:,m)=[0.445,0.311,8.928];
+        U0(:,m)=[0.445,0.311,8.928];
+    else
+        U(:,m)=[0.5,0,1.4275];
+        U0(:,m)=[0.5,0,1.4275];
+    end
+    X(1,m)=x;
+end
+
+for n=1:N
+    for m=1:M
+        if m==1
+            U(:,m)=[0.445,0.311,8.928];
+        elseif m==M
+            U(:,m)=[0.5,0,1.4275];
+        else
+            u=U(2,m)/U(1,m);
+            p=(r-1)*(U(3,m)-0.5*U(1,m)*u^(2));
+            c=sqrt(r*p/U(1,m));
+            H=(U(3,m)+p)/U(1,m);
+            A=[0,1,0;-(3-r)/2*u^(2),(3-r)*u,r-1;-(r)*u*U(3,m)/U(1,m)+(r-1)*u^(3),(r)*U(3,m)/U(1,m)-(r-1)*3/2*u^(2),(r)*u];
+            R=[1,1,1;u-c,u,u+c;H-u*c,0.5*u^(2),H+u*c];
+            L=(r-1)/(2*c^(2))*[0.5*u*(u+2*c/(r-1)),-(u+c/(r-1)),1;2*(H-u^(2)),2*u,-2;0.5*u*(u-2*c/(r-1)),-(u-c/(r-1)),1];
+            V=L*A*R;
+            V_total{1,m}=V;
+            Ma=[abs(V(1,1))*L(1,:)*(U(:,m)-U(:,m-sign(V(1,1))));abs(V(2,2))*L(2,:)*(U(:,m)-U(:,m-sign(V(2,2))));abs(V(3,3))*L(3,:)*(U(:,m)-U(:,m-sign(V(3,3))))];
+            U(:,m)=U(:,m)-dt/dx*R*Ma;
+        end
+    end
+end
+
+plot(X,U(1,:),'k');
+hold on;
+plot(X,U0(1,:),'k:');
+
+plot(X,U(2,:),'k');
+hold on;
+plot(X,U0(2,:),'k:');
+
+plot(X,U(3,:),'k');
+hold on;
+plot(X,U0(3,:),'k:');
+% %
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
