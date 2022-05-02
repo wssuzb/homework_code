@@ -1,0 +1,306 @@
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Upwind_conservation,main,by Matlab%
+M=1001;
+N=1001;
+L=2;
+T=0.1;
+dt=T/(N-1);
+dx=L/(M-1);
+V_total=cell(1,M);
+U0=zeros(7,M);
+U=zeros(7,M);
+U_total=cell(1,N);
+A=zeros(7,7);
+X=zeros(1,M);
+r=5/3;
+miu=1;
+Hx=5;
+
+for m=1:M
+    x=-L/2+(m-1)*dx;
+    if x<0.2
+        rho=2.121;
+        p=4.981;
+        vx=-13.27;
+        vy=-0.163;
+        vz=-0.6521;
+        Hy=2.572;
+        Hz=10.29;
+        H2=Hx^(2)+Hy^(2)+Hz^(2);
+        v2=vx^(2)+vy^(2)+vz^(2);
+        H2=Hx^(2)+Hy^(2)+Hz^(2);
+        v2=vx^(2)+vy^(2)+vz^(2);
+        E=0.5*rho*v2+p/(r-1)+miu*(H2)/(8*pi);
+        U(:,m)=[rho;rho*vx;rho*vy;rho*vz;E;Hy;Hz];
+        U0(:,m)=U(:,m);
+    else
+        rho=1;
+        p=0.1;
+        vx=-0.9225;
+        vy=0;
+        vz=0;
+        Hy=1;
+        Hz=1;
+        H2=Hx^(2)+Hy^(2)+Hz^(2);
+        v2=vx^(2)+vy^(2)+vz^(2);
+        E=0.5*rho*v2+p/(r-1)+miu*(H2)/(8*pi);
+        U(:,m)=[rho;rho*vx;rho*vy;rho*vz;E;Hy;Hz];
+        U0(:,m)=U(:,m);
+    end
+    X(1,m)=x;
+end
+
+for n=1:N
+        for m=1:M
+            if m==1
+                U(:,m)=U0(:,m);
+            elseif m==M
+                U(:,m)=U0(:,m);
+            else
+                A=VALUE_function(U,m,r,miu,Hx);
+                [R,VR]=eig(A);
+                L=inv(R);
+                V=L*A*R;
+                V_total{1,m}=V;
+                Ma=[abs(V(1,1))*L(1,:)*(U(:,m)-U(:,m-sign(V(1,1))));abs(V(2,2))*L(2,:)*(U(:,m)-U(:,m-sign(V(2,2))));abs(V(3,3))*L(3,:)*(U(:,m)-U(:,m-sign(V(3,3))));abs(V(4,4))*L(4,:)*(U(:,m)-U(:,m-sign(V(4,4))));abs(V(5,5))*L(5,:)*(U(:,m)-U(:,m-sign(V(5,5))));abs(V(6,6))*L(6,:)*(U(:,m)-U(:,m-sign(V(6,6))));abs(V(7,7))*L(7,:)*(U(:,m)-U(:,m-sign(V(7,7))))];
+                U(:,m)=U(:,m)-dt/dx*R*Ma;
+            end
+        end
+end
+
+set(gcf,'unit','normalized','position',[0,0,0.25,0.15]);
+plot(X,U(1,:),'k');
+hold on;
+plot(X,U0(1,:),'k:');
+ylim([0,4.5]);
+
+%Upwind_conservation,VALUE_function,by Matlab%
+function [A]=VALUE_function(U,m,r,miu,Hx)
+    A=zeros(7,7);
+    rho=U(1,m);
+    mx=U(2,m);
+    my=U(3,m);
+    mz=U(4,m);
+    m2=mx^(2)+my^(2)+mz^(2);
+    E=U(5,m);
+    Hy=U(6,m);
+    Hz=U(7,m);
+    H2=Hx^(2)+Hy^(2)+Hz^(2);
+    A(1,2)=1;
+    A(2,1)=-mx^(2)/rho^(2)+0.5*m2/(rho)^(2)*(r-1);
+    A(2,2)=mx/rho*(3-r);
+    A(2,3)=-my/rho*(r-1);
+    A(2,4)=-mz/rho*(r-1);
+    A(2,5)=(r-1);
+    A(2,6)=miu*Hy/(4*pi)*(2-r);
+    A(2,7)=miu*Hz/(4*pi)*(2-r);
+    A(3,1)=-mx*my/rho^(2);
+    A(3,2)=my/rho;
+    A(3,3)=mx/rho;
+    A(3,6)=-miu*Hx/(4*pi);
+    A(4,1)=-mx*mz/rho^(2);
+    A(4,2)=mz/rho;
+    A(4,4)=mx/rho;
+    A(4,7)=-miu*Hx/(4*pi);
+    A(5,1)=-mx/rho^(2)*E*r+mx*m2/rho^(3)*(r-1)-(2-r)*miu*(H2)*mx/(8*pi*rho^(2))+miu*Hx*(mx*Hx+my*Hy+mz*Hz)/(4*pi*rho^(2));
+    A(5,2)= r*E/rho-0.5*(r-1)*(2*mx^(2)+m2)/rho^(2)+(2-r)*miu*H2/(8*pi*rho)-miu*Hx^(2)/(4*pi*rho);
+    A(5,3)=-mx*my*(r-1)/(rho^(2))-miu*Hx*Hy/(4*pi*rho);
+    A(5,4)=-mx*mz*(r-1)/(rho^(2))-miu*Hx*Hz/(4*pi*rho);
+    A(5,5)=r*mx/rho;
+    A(5,6)=(2-r)*miu*Hy*mx/(4*pi*rho)-miu*Hx*my/(4*pi*rho);
+    A(5,7)=(2-r)*miu*Hz*mx/(4*pi*rho)-miu*Hx*mz/(4*pi*rho);
+    A(6,1)=-(Hy*mx-Hx*my)/rho^(2);
+    A(6,2)=Hy/rho;
+    A(6,3)=-Hx/rho;
+    A(6,6)=mx/rho;
+    A(7,1)=-(Hz*mx-Hx*mz)/rho^(2);
+    A(7,2)=Hz/rho;
+    A(7,4)=-Hx/rho;
+    A(7,7)=mx/rho;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Lax-Wendroff,main,by Matlab%
+M=1001;
+N=1001;
+L=3;
+T=0.1;
+dt=T/(N-1);
+dx=L/(M-1);
+V_total=cell(1,M);
+U0=zeros(7,M);
+U=zeros(7,M);
+Ua=zeros(7,M);
+Ub=zeros(7,M);
+Uc=zeros(7,M);
+Um=zeros(7,M);
+U_total=cell(1,N);
+A=zeros(7,7);
+X=zeros(1,M);
+r=5/3;
+miu=1;
+Hx=5;
+
+for m=1:M
+    x=-L/2+(m-1)*dx;
+    if x<0
+        rho=2.121;
+        p=4.981;
+        vx=-13.27;
+        vy=-0.163;
+        vz=-0.6521;
+        Hy=2.572;
+        Hz=10.29;
+        H2=Hx^(2)+Hy^(2)+Hz^(2);
+        v2=vx^(2)+vy^(2)+vz^(2);
+        E=0.5*rho*v2+p/(r-1)+miu*(H2)/(8*pi);
+        U(:,m)=[rho;rho*vx;rho*vy;rho*vz;E;Hy;Hz];
+        U0(:,m)=U(:,m);
+    else
+        rho=1;
+        p=1;
+        vx=-15.3;
+        vy=0;
+        vz=0;
+        Hy=1;
+        Hz=4;
+        H2=Hx^(2)+Hy^(2)+Hz^(2);
+        v2=vx^(2)+vy^(2)+vz^(2);
+        E=0.5*rho*v2+p/(r-1)+miu*(H2)/(8*pi);
+        U(:,m)=[rho;rho*vx;rho*vy;rho*vz;E;Hy;Hz];
+        U0(:,m)=U(:,m);
+    end
+    X(1,m)=x;
+end
+
+for n=1:N
+    for m=1:M
+        if m==1||m==M         
+            U(:,m)=U0(:,m);
+        else
+            A12=VALUE_A_ave_function(U,m,r,miu,Hx);
+            A_12=VALUE_A_ave_function(U,m-1,r,miu,Hx);
+            F1=VALUEF_function(U,m+1,r,miu,Hx);
+            F=VALUEF_function(U,m,r,miu,Hx);
+            F_1=VALUEF_function(U,m-1,r,miu,Hx);
+            U(:,m)=U(:,m)-dt/(dx*2)*(F1-F_1)+(dt/dx)^(2)/2*(A12*(F1-F)-A_12*(F-F_1));
+        end
+    end
+    for m=1:M
+        for j=1:7
+            if m~=1&&m~=M&&(U(j,m+1)-U(j,m))/(U(j,m)-U(j,m-1))<0
+                L=[U(j,m+1);U(j,m);U(j,m-1)];
+                L=sortrows(L,1);
+                Ua(j,m)=((L(1,1)+L(2,1))/2+(L(3,1)+L(2,1))/2)/2;
+            else
+                Ua(j,m)=U(j,m);
+            end
+        end
+    end
+    for m=1:M
+        for j=1:7
+            if m~=1&&m~=M&&(Ua(j,m+1)-Ua(j,m))/(Ua(j,m)-Ua(j,m-1))<0
+                L=[Ua(j,m+1);Ua(j,m);Ua(j,m-1)];
+                L=sortrows(L,1);
+                Ub(j,m)=((L(1,1)+L(2,1))/2+(L(3,1)+L(2,1))/2)/2;
+            else
+                Ub(j,m)=Ua(j,m);
+            end
+        end
+    end
+    for m=1:M
+        for j=1:7
+            if m~=1&&m~=M&&(Ub(j,m+1)-Ub(j,m))/(Ub(j,m)-Ub(j,m-1))<0
+                L=[Ub(j,m+1);Ub(j,m);Ub(j,m-1)];
+                L=sortrows(L,1);
+                Uc(j,m)=((L(1,1)+L(2,1))/2+(L(3,1)+L(2,1))/2)/2;
+            else
+                Uc(j,m)=Ub(j,m);
+            end
+        end
+    end
+    U_total{1,n}=Uc;
+    if n==500
+        Um=Uc;
+    end
+end
+
+set(gcf,'unit','normalized','position',[0,0,0.25,0.15]);
+plot(X,Uc(1,:),'k');
+hold on;
+plot(X,Um(1,:),'k');
+hold on;
+plot(X,U0(1,:),'k:');
+ylim([0,4.5]);
+
+%Lax-Wendroff,VALUEF_function,by Matlab%
+function [F]=VALUEF_function(U,m,r,miu,Hx)
+    F=zeros(7,1);
+    rho=U(1,m);
+    mx=U(2,m);
+    my=U(3,m);
+    mz=U(4,m);
+    m2=mx^(2)+my^(2)+mz^(2);
+    E=U(5,m);
+    Hy=U(6,m);
+    Hz=U(7,m);
+    H2=Hx^(2)+Hy^(2)+Hz^(2);
+    F(1,1)=mx;
+    F(2,1)=mx^(2)/rho+(E-0.5*m2/rho-miu*H2/(8*pi))*(r-1)+miu*H2/(8*pi);
+    F(3,1)=mx*my/rho-miu*Hx*Hy/(4*pi);
+    F(4,1)=mx*mz/rho-miu*Hx*Hz/(4*pi);
+    F(5,1)=mx/rho*E+mx/rho*((E-0.5*m2/rho-miu*H2/(8*pi))*(r-1)+miu*H2/(8*pi))-miu*Hx*(Hx*mx+Hy*my+Hz*mz)/(4*pi*rho);
+    F(6,1)=(Hy*mx-Hx*my)/rho;
+    F(7,1)=(Hz*mx-Hx*mz)/rho;
+end
+
+%Lax-Wendroff,VALUE_A_ave_function,by Matlab%
+function [A]=VALUE_A_ave_function(U,m,r,miu,Hx)
+    A=zeros(7,7);
+    rho=(U(1,m)+U(1,m+1))/2;
+    mx=(U(2,m)+U(2,m+1))/2;
+    my=(U(3,m)+U(3,m+1))/2;
+    mz=(U(4,m)+U(4,m+1))/2;
+    m2=mx^(2)+my^(2)+mz^(2);
+    E=(U(5,m)+U(5,m+1))/2;
+    Hy=(U(6,m)+U(6,m+1))/2;
+    Hz=(U(7,m)+U(7,m+1))/2;
+    H2=Hx^(2)+Hy^(2)+Hz^(2);
+    A(1,2)=1;
+    A(2,1)=-mx^(2)/rho^(2)+0.5*m2/(rho)^(2)*(r-1);
+    A(2,2)=mx/rho*(3-r);
+    A(2,3)=-my/rho*(r-1);
+    A(2,4)=-mz/rho*(r-1);
+    A(2,5)=(r-1);
+    A(2,6)=miu*Hy/(4*pi)*(2-r);
+    A(2,7)=miu*Hz/(4*pi)*(2-r);
+    A(3,1)=-mx*my/rho^(2);
+    A(3,2)=my/rho;
+    A(3,3)=mx/rho;
+    A(3,6)=-miu*Hx/(4*pi);
+    A(4,1)=-mx*mz/rho^(2);
+    A(4,2)=mz/rho;
+    A(4,4)=mx/rho;
+    A(4,7)=-miu*Hx/(4*pi);
+    A(5,1)=-mx/rho^(2)*E*r+mx*m2/rho^(3)*(r-1)-(2-r)*miu*H2*mx/(8*pi*rho^(2))+miu*Hx*(mx*Hx+my*Hy+mz*Hz)/(4*pi*rho^(2));
+    A(5,2)= r*E/rho-0.5*(r-1)*(2*mx^(2)+m2)/rho^(2)+(2-r)*miu*H2/(8*pi*rho)-miu*Hx^(2)/(4*pi*rho);
+    A(5,3)=-mx*my*(r-1)/(rho^(2))-miu*Hx*Hy/(4*pi*rho);
+    A(5,4)=-mx*mz*(r-1)/(rho^(2))-miu*Hx*Hz/(4*pi*rho);
+    A(5,5)=r*mx/rho;
+    A(5,6)=(2-r)*miu*Hy*mx/(4*pi*rho)-miu*Hx*my/(4*pi*rho);
+    A(5,7)=(2-r)*miu*Hz*mx/(4*pi*rho)-miu*Hx*mz/(4*pi*rho);
+    A(6,1)=-(Hy*mx-Hx*my)/rho^(2);
+    A(6,2)=Hy/rho;
+    A(6,3)=-Hx/rho;
+    A(6,6)=mx/rho;
+    A(7,1)=-(Hz*mx-Hx*mz)/rho^(2);
+    A(7,2)=Hz/rho;
+    A(7,4)=-Hx/rho;
+    A(7,7)=mx/rho;
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
